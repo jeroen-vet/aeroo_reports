@@ -218,7 +218,7 @@ class IrActionsReport(models.Model):
         )
 
     def _get_aeroo_context(self, record):
-        """Get the rendering context of an aeroo report."""
+        """Get the rendering context of an aeroo report."""       
         return {
             'lang': self._get_aeroo_lang(record),
             'tz': self._get_aeroo_timezone(record),
@@ -264,7 +264,7 @@ class IrActionsReport(models.Model):
             return attachment_output, output_format
 
         template = self._get_aeroo_template(record)
-
+        data = self._get_rendering_context(doc_ids, data) # JV change here to allow creating own 'parsers'
         # Render the report
         current_report_data = dict(
             data, o=record.with_context(**report_context))
