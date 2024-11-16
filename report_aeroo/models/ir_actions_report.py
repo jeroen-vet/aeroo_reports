@@ -11,6 +11,7 @@ import sys
 import traceback
 from aeroolib.plugins.opendocument import Template, OOSerializer
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 from functools import wraps
 from io import BytesIO
 from genshi.template.eval import StrictLookup
@@ -22,6 +23,7 @@ from odoo.exceptions import ValidationError
 from odoo.tools import file_open, safe_eval
 from odoo.addons.mail.models.mail_template import mako_template_env
 
+from ..namespace import AerooNamespace
 from ..subprocess import run_subprocess
 from ..extra_functions import aeroo_function_registry
 
@@ -46,44 +48,58 @@ class IrActionsReport(models.Model):
     report_type = fields.Selection(selection_add=[('aeroo', 'Aeroo Reports')])
     aeroo_in_format = fields.Selection(
         selection='_get_in_aeroo_mimetypes', string='Template Mime-type',
+        prefetch=False,
         default=lambda self: 'odt')
     aeroo_out_format_id = fields.Many2one(
         'aeroo.mimetype', 'Output Mime-type',
+        prefetch=False,
         default=_get_default_aeroo_out_format)
     aeroo_template_source = fields.Selection([
         ('database', 'Database'),
         ('file', 'File'),
         ('lines', 'Different Template per Language / Company'),
-    ], string='Template source', default='database')
-    aeroo_template_data = fields.Binary()
-    aeroo_template_path = fields.Char()
+    ], prefetch=False, string='Template source', default='database')
+    aeroo_template_data = fields.Binary(prefetch=False)
+    aeroo_template_path = fields.Char(prefetch=False)
     aeroo_template_line_ids = fields.One2many(
-        'aeroo.template.line', 'report_id', 'Templates by Language')
+        'aeroo.template.line', 'report_id', 'Templates by Language', prefetch=False)
     aeroo_lang_eval = fields.Char(
         'Language Evaluation',
         help="Python expression used to determine the language "
         "of the record being printed in the report.",
-        default="o.partner_id.lang")
+        prefetch=False,
+        default="user.lang")
     aeroo_tz_eval = fields.Char(
         'Timezone Evaluation',
         help="Python expression used to determine the timezone "
         "used for formatting dates and timestamps.",
+        prefetch=False,
         default="user.tz")
     aeroo_company_eval = fields.Char(
         'Company Evaluation',
         help="Python expression used to determine the company "
         "of the record being printed in the report.",
-        default="o.company_id")
+        prefetch=False,
+        default="user.company_id")
     aeroo_country_eval = fields.Char(
         'Country Evaluation',
         help="Python expression used to determine the country "
         "of the record being printed in the report.",
+        prefetch=False,
         default="user.company_id.country_id")
     aeroo_currency_eval = fields.Char(
         'Currency Evaluation',
         help="Python expression used to determine the currency "
         "of the record being printed in the report.",
-        default="o.currency_id")
+        prefetch=False,
+        default="user.company_id.currency_id")
+
+    @api.multi
+    def read(self, fields=None, load='_classic_read'):
+        if not fields:
+            fields = [k for k, v in self._fields.items() if v.type != "binary"]
+
+        return super().read(fields, load)
 
     def _get_aeroo_template(self, record):
         """Get an aeroo template for the given record.
@@ -224,6 +240,8 @@ class IrActionsReport(models.Model):
             'tz': self._get_aeroo_timezone(record),
             'country': self._get_aeroo_country(record),
             'currency': self._get_aeroo_currency(record),
+            'company': self._get_aeroo_company(record),
+            'relativedelta': relativedelta,
         }
 
     def _get_aeroo_libreoffice_timeout(self):
@@ -267,7 +285,7 @@ class IrActionsReport(models.Model):
         data = self._get_rendering_context(doc_ids, data) # JV change here to allow creating own 'parsers'
         # Render the report
         current_report_data = dict(
-            data, o=record.with_context(**report_context))
+            data, o=record.with_context(**report_context), **report_context)
         output = self._render_aeroo(template, current_report_data, output_format)
 
         # Generate the attachment
@@ -291,6 +309,7 @@ class IrActionsReport(models.Model):
 
         report_context = GenshiContext(**data)
         report_context.update(self._get_aeroo_extra_functions())
+        report_context['t'] = AerooNamespace()
 
         output = Template(source=template_io, serializer=serializer)\
             .generate(report_context).render().getvalue()
@@ -566,7 +585,7 @@ class AerooReportsGeneratedFromListViews(models.Model):
 
         template = self._get_aeroo_template(records[0])
         report_context = self._get_aeroo_context(records[0])
-        report_data = dict(data, objects=records)
+        report_data = dict(data, objects=records, **report_context)
 
         # Render the report
         output = self.with_context(**report_context)._render_aeroo(
@@ -584,7 +603,7 @@ class AerooReportsWithAttachmentFilenamePerLang(models.Model):
 
     _inherit = 'ir.actions.report'
 
-    aeroo_filename_per_lang = fields.Boolean('Different Filename per Language')
+    aeroo_filename_per_lang = fields.Boolean('Different Filename per Language', prefetch=False,)
     aeroo_filename_line_ids = fields.One2many(
         'aeroo.filename.line', 'report_id', 'Filenames by Language')
 

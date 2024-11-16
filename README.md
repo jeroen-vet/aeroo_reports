@@ -48,10 +48,11 @@ The language used for printing the template must be parametrized in the field 'L
 
 ## Numbers and Currencies
 
-Aeroo defines 2 helpers for formatting number field values in the language of the report.
+Aeroo defines helpers for formatting number field values in the language of the report.
 
 * format_decimal
 * format_currency
+* format_hours
 
 ### Exemple for format_decimal
 
@@ -127,14 +128,25 @@ you would get an amount format as follow:
 1 500,00 $US
 ```
 
+### Example for format_hours
+
+This function formats an amount into hours and minutes.
+
+```python
+format_hours(o.amount)
+```
+
+Suppose the amount is ``1.25``, the formatted amount will be ``01:15``.
+
 ## Date and Time
 
-Aeroo defines 2 helpers for formatting date and datetime field values in the language of the report.
+Aeroo defines helpers for formatting date and datetime field values in the language of the report.
 
 * format_date
 * format_datetime
 * today
 * now
+* relativedelta
 
 The variables that you can use in these functions are documented on the babel website:
 
@@ -191,6 +203,62 @@ Suppose we are on the 6 of April 2018, 10:34 AM and the report is printed in Fre
 ```
 06 avril 2018 10:34 AM
 ```
+
+### Time Delta
+
+You may use the function relativedelta to add an interval to a date to be printed in a report.
+
+For example, suppose your invoice is issued on ``2022-08-01``
+and you want to print a date 2 months in the future (relative to the invoice date).
+
+```python
+format_date(o.date_invoice + relativedelta(months=2), 'dd MMMM yyyy')
+```
+
+The result is:
+
+```
+01 octobre 2022
+```
+
+The function relativedelta can be used with different types of intervals (days, months, weeks, years, etc).
+The documentation can be found at https://dateutil.readthedocs.io/en/stable/relativedelta.html.
+
+
+## Grouping Rows
+
+It is possible to group rows to display in a table.
+
+In the following example, the invoice lines are grouped by per product category:
+
+```xml
+<for each="(category, lines) in group_by(o.invoice_line_ids, lambda line: line.product_id.categ_id)">
+```
+
+Each tuple contains:
+
+1. the groupment key
+2. the records matching this groupment key
+
+### Grouping Rows in a Particular Order
+
+By default, the groupment keys are not sorted in any particular order.
+
+Usually, we will require to sort the grouped records by some criteria.
+This can be done using the argument ``sort`` of the ``group_by`` function.
+
+The ``sort`` argument expects a function.
+This function takes as argument the groupment key.
+
+In the following example, the groupment keys (the product categories) are sorted by their ``Display Name``.
+
+```xml
+<for each="(category, lines) in group_by(o.invoice_line_ids, lambda line: line.product_id.categ_id, sort=lambda category: category.display_name)">
+```
+
+Here is a preview on how to organize the for/each statements in your libreoffice template.
+
+![Group By Example](report_aeroo/static/description/libreoffice_writer_group_by.png?raw=true)
 
 ## Generate Report From List View
 
